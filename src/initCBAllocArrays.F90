@@ -1472,6 +1472,7 @@ contains
   subroutine initArrays
     use params
     use commons
+    use sapPotential
 
     ! initialize arrays within common blocks (except for differentiating
     ! arrays which are defined in prepdiff) and check input data
@@ -1504,9 +1505,9 @@ contains
 
     ! calculate weights of exchange contributions to the total energy
     ! expression for the given open/closed shell scf case
-
     call initExWeights
 
+    call sapPotentialInit
   end subroutine initArrays
 
 
