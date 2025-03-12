@@ -1,7 +1,7 @@
 ! SPDX-License-Identifier: GPL-2.0-or-later
 
 ! Copyright (C) 1996       Leif Laaksonen, Dage Sundholm               
-! Copyright (C) 1996-2024  Jacek Kobus 
+! Copyright (C) 1996-2023  Jacek Kobus 
 
 module diskInterfaceMisc
   implicit none
@@ -566,13 +566,17 @@ contains
     enddo
 
     ! tau: wk2 = 1/2 \sum_i q_i \nabla psi_i \nabla psi_i     
-    do iorb1=1,norb
-       iborb1 =i1b (iorb1)
-       call nfng(psi(iborb1:),psi(iborb1:),wk3,wk4,wk5,wk6,wk7,wk8,wk9,wk10)
-       call dscal (mxsize,half*occ(iorb1),wk10,ione)
-       call add(mxsize,wk10,wk2)
-    enddo
+    ! do iorb1=1,norb
+    !    iborb1 =i1b (iorb1)
+    !    call nfng(psi(iborb1:),psi(iborb1:),wk3,wk4,wk5,wk6,wk7,wk8,wk9,wk10)
+    !    call dscal (mxsize,half*occ(iorb1),wk10,ione)
+    !    call add(mxsize,wk10,wk2)
+    ! enddo
+    call zeroArray(mxsize,wk10)
+    call tau(psi,wk3,wk4,wk5,wk6,wk7,wk8,wk9,wk10,wk11,wk12,wk13)
+    call dscal (mxsize,half,wk13,ione)
 
+    
 #ifdef PRINT
     ! print=140: printResults: 1/2\sum_i q_i <|\nabla \phi_i|^2>
     if (iprint(140).ne.0) then
@@ -748,265 +752,6 @@ contains
 
   end subroutine writeDisk4kinpot
 
-  ! ### writeDisk4kinpot ### 
-  !
-  !     Calculates and writes to disk the Pauli and von Weizsaecker kinetic potentials.
-  !
-  subroutine writeDisk4kinpot2 (psi,pot,excp,e,f0,f1,f2,f3,f4,wgt1,wgt2,&
-       wk0,wk1,wk2,wk3,wk4,wk5,wk6,wk7,wk8,wk9,wk10,wk11,wk12,wk13)
-
-    use blas
-    use commons
-    use dftvxc    
-    use discrete
-    use elocc
-    use memory
-    use nabla    
-    use params
-    use scfshr
-    use solver
-    use utils
-
-    implicit none
-
-    integer (KIND=IPREC),parameter :: iunit=9999
-    integer (KIND=IPREC) :: i,ii,iborb1,ibpot1,iorb,iorb1,igp,imu,inu,j,&
-         ngorb,ngorb1,ngpot,ngpot1,np
-
-    real (PREC) :: xnorm,zshift
-    real (PREC),dimension(*) :: psi,pot,excp,e,f0,f1,f2,f3,f4,wgt1,wgt2,wk0,wk1,&
-         wk2,wk3,wk4,wk5,wk6,wk7,wk8,wk9,wk10,wk11,wk12,wk13
-
-#ifdef BLAS    
-    real (PREC) ddot
-    external ddot
-#endif
-
-    call zeroArray(mxsize,wk0)        
-    call zeroArray(mxsize,wk2)    
-
-    ! wk0 = \rho = \sum_i \rho_i
-    do iorb1=1,norb
-       iborb1 =i1b (iorb1)
-       call prodas (mxsize,occ(iorb1),psi(iborb1),psi(iborb1),wk0)
-    enddo
-
-    do iorb1=1,norb
-       iborb1 =i1b (iorb1)
-       call nfng(psi(iborb1),psi(iborb1),wk3,wk4,wk5,wk6,wk7,wk8,wk9,wk10)
-       call dscal (mxsize,half*occ(iorb1),wk10,ione)
-       call add(mxsize,wk10,wk2)
-    enddo
-    
-    call dcopy (mxsize,wk2,ione,wk8,ione)
-    call prod (mxsize,f4,wk8)
-    xnorm=ddot (mxsize,wgt2,ione,wk8,ione)
-    write(*,'(" 1/2\sum <|\nabla \phi|^2> = ",1pe16.8)') xnorm
-
-    ! w13 = tau
-    call zeroArray(mxsize,wk10)
-    call tau(psi,wk3,wk4,wk5,wk6,wk7,wk8,wk9,wk10,wk11,wk12,wk13)
-    call dscal (mxsize,half,wk13,ione)
-
-    call dcopy (mxsize,wk13,ione,wk8,ione)
-    call prod (mxsize,f4,wk8)
-    xnorm=ddot (mxsize,wgt2,ione,wk8,ione)
-    write(*,'("    call tau:       <\tau> = ",1pe16.8)') xnorm
-
-    ! w12 = \nabla^2 \rho
-    !call n2f(wk0,wk5,wk6,wk7,wk12)
-    !call n2rho(psi,wk4,wk5,wk6,wk7,wk12)
-    call laplace(psi,e,wk5,wk6,wk7,wk8,wk12)
-
-    call dcopy (mxsize,wk13,ione,wk8,ione)
-    call dscal(mxsize,four,wk8,ione)
-    call add (mxsize,wk8,wk12)
-    !call dscal(mxsize,two,wk12,ione)
-
-    ! 
-    ! do i=1,mxnmu
-    !    ii=(i-1)*nni
-    !    do j=1,nni
-    !       wk12(ii+j)=four*pii*(r/two*vxi(i)*veta(j)+r/two)*wk12(ii+j)
-    !    enddo
-    ! enddo
-
-    call dcopy (mxsize,wk12,ione,wk8,ione)
-    !call prod (mxsize,wk0,wk8)
-    call prod (mxsize,f4,wk8)
-    xnorm=ddot (mxsize,wgt2,ione,wk8,ione)
-    write(*,'("wgt2:  \nabla^2 \rho (tau) = ",1pe16.8)') xnorm
-
-
-    !call n2f(wk0,wk5,wk6,wk7,wk12)
-    ! call dcopy (mxsize,wk12,ione,wk8,ione)
-    ! call prod (mxsize,wk0,wk8)
-    ! call prod (mxsize,f4,wk8)
-    ! xnorm=ddot (mxsize,wgt2,ione,wk8,ione)
-    ! write(*,'("wgt2:  \nabla^2 \rho (n2f) = ",1pe16.8)') xnorm
-
-    call zeroArray(mxsize,wk10)
-    
-    ! call prod (mxsize,f4,wk2)
-    ! xnorm=ddot (mxsize,wgt2,ione,wk2,ione)
-    ! print *,"tau=",xnorm
-    
-    ! wk4 == Pauli kinetic potential
-    ! wk5 == von Weizsaecker kinetic potential
-
-    ! wk10 = |\nabla \rho |^2
-    call nfng(wk0,wk0,wk3,wk4,wk5,wk6,wk7,wk8,wk9,wk10)
-
-
-    ! wk3 = sum_i (E_{HOMO} -E_i) \rho_i
-    call zeroArray(mxsize,wk3)
-
-    do iorb1=1,norb
-       iborb1 =i1b (iorb1)
-       call prod2 (mxsize,psi(iborb1),psi(iborb1),wk4)
-       call dscal (mxsize, occ(iorb1),wk4,ione)
-       call dscal (mxsize, ee(ione,ione)-ee(iorb1,iorb1),wk4,ione)
-       call add (mxsize,wk4,wk3)
-    enddo
-
-    call n2rho(psi,wk4,wk5,wk6,wk7,wk8)
-    
-    ! wk6 = tau^W = |\nabla \rho|^2/(8\rho)
-    !                    wk10          wk0
-    do inu=1,nni
-       do imu=1,mxnmu
-          igp=(imu-1)*nni + inu
-          if (abs(wk0(igp))>precis) then
-             wk6(igp)=wk10(igp)/(eight*wk0(igp))
-             wk3(igp)=wk3(igp)/wk0(igp)
-             !wk4(igp)=( wk13(igp) - wk6(igp)) /wk0(igp) + wk3(igp)/wk0(igp)
-             wk4(igp)=( wk13(igp) - wk6(igp)) /wk0(igp) + wk3(igp)
-
-             wk5(igp)=wk6(igp)/wk0(igp)-wk12(igp)/(four*wk0(igp))
-             !print *,igp,inu,imu,wk0(igp),wk4(igp),wk3(igp)
-          else
-             wk3(igp)=zero
-             wk4(igp)=zero
-             wk5(igp)=zero
-             wk6(igp)=zero             
-          endif
-       enddo
-    enddo
-
-    open(iunit,file='out4kinpot.dat', status='unknown',form='formatted')
-    
-    write(iunit,1000)
-1000 format("     #z+R/2",11x,"rho",6x,4x,"nabla^2 rho",8x,"tau",&
-          13x,"tau^W",11x,"v^P",14x,"v^W",13x,"v_k",13x,"allee")
-    
-
-    call dcopy (mxsize,wk12,ione,wk8,ione)
-    ! correct the values of Laplacian along the internuclear axis
-    call setBVgen(ione,ione,wk8)
-
-    ! j=nni
-    ! do i=2,mxnmu-4
-    !    np=np+1
-    !    write(iunit,'(1p12e16.8)') -(r/two*vxi(i)*veta(j)+r/two),&       
-    !         wk12((i-1)*nni+j),(wk12((i-1)*nni+j)-wk8((i-1)*nni+j))
-    ! enddo
-
-    ! write(iunit,'("tau")')    
-    
-    ! call dcopy (mxsize,wk13,ione,wk8,ione)
-    ! ! correct the values of Laplacian along the internuclear axis
-    ! call setBVgen(ione,ione,wk8)
-
-    ! do i=2,mxnmu-4
-    !    np=np+1
-    !    write(iunit,'(1p12e16.8)') -(r/two*vxi(i)*veta(j)+r/two),&       
-    !         wk13((i-1)*nni+j),(wk13((i-1)*nni+j)-wk8((i-1)*nni+j))
-    ! enddo
-
-
-    ! write(iunit,'("tau^W")')
-    
-    ! call dcopy (mxsize,wk6,ione,wk8,ione)
-    ! ! correct the values of Laplacian along the internuclear axis
-    ! call setBVgen(ione,ione,wk8)
-
-    ! do i=2,mxnmu-4
-    !    np=np+1
-    !    write(iunit,'(1p12e16.8)') -(r/two*vxi(i)*veta(j)+r/two),&       
-    !         wk6((i-1)*nni+j),(wk6((i-1)*nni+j)-wk8((i-1)*nni+j))
-    ! enddo
-
-
-    ! write(iunit,'("v^P")')
-    
-    ! call dcopy (mxsize,wk4,ione,wk8,ione)
-    ! ! correct the values of Laplacian along the internuclear axis
-    ! call setBVgen(ione,ione,wk8)
-
-    ! do i=2,mxnmu-4
-    !    np=np+1
-    !    write(iunit,'(1p12e16.8)') -(r/two*vxi(i)*veta(j)+r/two),&       
-    !         wk4((i-1)*nni+j),(wk4((i-1)*nni+j)-wk8((i-1)*nni+j))
-    ! enddo
-
-
-    ! write(iunit,'("v^W")')
-    
-    ! call dcopy (mxsize,wk5,ione,wk8,ione)
-    ! ! correct the values of Laplacian along the internuclear axis
-    ! call setBVgen(ione,ione,wk8)
-
-    ! do i=2,mxnmu-4
-    !    np=np+1
-    !    write(iunit,'(1p12e16.8)') -(r/two*vxi(i)*veta(j)+r/two),&       
-    !         wk5((i-1)*nni+j),(wk5((i-1)*nni+j)-wk8((i-1)*nni+j))
-    ! enddo
-    
-    ! return
-
-    
-    !F (A) 0.04618936
-    !H (A) -0.87071064
-
-    !zshift=-0.87071064/bohr2ang
-    !print *,"r(H) r(F): ", zshift, zshift+r
-
-    ! O (A) -0.48351647
-    ! C (A)  0.64448353 
-    zshift=-0.48351647/bohr2ang
-    print *,"r(O) r(C): ", zshift, zshift+r
-    
-    np=0
-
-    j=nni
-    do i=mxnmu-4,2,-1
-       !do i=2,mxnmu-4
-       np=np+1
-       write(iunit,'(1p12e16.8)') (r/two*vxi(i)*veta(j)+r/two+zshift),&       
-            wk0((i-1)*nni+j),wk12((i-1)*nni+j),wk13((i-1)*nni+j),&                                    
-            wk6((i-1)*nni+j),wk4((i-1)*nni+j),wk5((i-1)*nni+j),wk4((i-1)*nni+j)+wk5((i-1)*nni+j),wk3((i-1)*nni+j)
-    enddo
-
-    
-    i=1
-    do j=nni,1,-1
-       np=np+1
-       write(iunit,'(1p12e16.8)') (r/two*vxi(i)*veta(j)+r/two+zshift),&       
-            wk0((i-1)*nni+j),wk8((i-1)*nni+j),wk13((i-1)*nni+j),&                                    
-            wk6((i-1)*nni+j),wk4((i-1)*nni+j),wk5((i-1)*nni+j),wk4((i-1)*nni+j)+wk5((i-1)*nni+j),wk3((i-1)*nni+j)
-    enddo
-
-    j=1
-    do i=2,mxnmu-4
-       np=np+1
-       write(iunit,'(1p12e16.8)') (r/two*vxi(i)*veta(j)+r/two+zshift),&       
-            wk0((i-1)*nni+j),wk8((i-1)*nni+j),wk13((i-1)*nni+j),&                                    
-            wk6((i-1)*nni+j),wk4((i-1)*nni+j),wk5((i-1)*nni+j),wk4((i-1)*nni+j)+wk5((i-1)*nni+j),wk3((i-1)*nni+j)
-    enddo
-
-    close(iunit)
-
-  end subroutine writeDisk4kinpot2
   
 end module diskInterfaceMisc
   
